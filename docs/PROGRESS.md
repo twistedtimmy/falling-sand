@@ -43,3 +43,14 @@ Gemini's engine kept with only the faults fixed, the plan's words, no extras.
   reflow at 640 px, text spacing, visible focus and Tab reach (9 stops) all pass.
   Not seen: the touch-screen-only styling (the counter and the key badges hidden) - headless Chrome is never a touch
   screen; that the page doesn't scroll while a finger draws (`touch-action: none`) on a real phone; how it feels.
+- **S3 done - live at https://twistedtimmy.github.io/falling-sand/.** `tools/publish.ps1` (safe to run again): reads
+  the GitHub login git already keeps on this PC (Git Credential Manager - the token stays in a variable, is never
+  printed or written, and nothing pops up), checks it (`twistedtimmy`, scopes gist, repo, workflow), creates the
+  public repo with its description and homepage, pushes main, switches Pages on (main, the top folder), then polls
+  until the live page's bytes equal `index.html` (SHA-256) and the link picture answers. The first build took about
+  30 seconds. Verify: the live address 200 with the same bytes as `index.html`; `assets/og.png` 200 `image/png`;
+  `check.ps1 -Url` - the title PASS, and its picture is byte for byte the local desktop picture (45,078 bytes both);
+  seen from outside with no login: public, homepage set, both commits by `twistedtimmy
+  <twistedtimmy@users.noreply.github.com>`. Two bugs found on the way, both in the script: a .NET pipe on this PC
+  starts with a byte-order mark, so git couldn't read `protocol=` (the question now goes in from a plain ASCII file);
+  and PowerShell names ignore case, so a `$repo` result was the `[string]$Repo` parameter and became text.
