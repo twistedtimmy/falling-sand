@@ -54,3 +54,9 @@ Gemini's engine kept with only the faults fixed, the plan's words, no extras.
   <twistedtimmy@users.noreply.github.com>`. Two bugs found on the way, both in the script: a .NET pipe on this PC
   starts with a byte-order mark, so git couldn't read `protocol=` (the question now goes in from a plain ASCII file);
   and PowerShell names ignore case, so a `$repo` result was the `[string]$Repo` parameter and became text.
+- **S4 done - the hand-over.** `README.md` in plain English: the address; what it is and where it came from; where
+  each word and colour lives in `index.html`; how to put a change online (`git push` - live about a minute later);
+  how to run the checks and remake the link picture. After this commit's push, `tools\publish.ps1` once more: the live
+  page still byte for byte `index.html`. Tier B: none picked (decision 6's default). Nobody has looked at the site on
+  a real screen yet - only headless pictures; a real finger on a real phone, a real mouse, and how it feels are Tim's
+  to try.
