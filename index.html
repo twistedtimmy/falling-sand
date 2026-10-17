@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>2D Cellular Automata Sandbox</title>
+  <style>
+    :root { --bg: #0d0d11; --panel: #181820; --border: #2e2e3e; --text: #e0e0e8; }
+    * { box-sizing: border-box; user-select: none; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-monospace, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+    .hud { display: flex; gap: 8px; align-items: center; background: var(--panel); padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+    button { background: #252532; color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; }
+    button.active { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.25); }
+    button:hover { background: #323244; }
+    .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+    label { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+    canvas { border: 1px solid var(--border); border-radius: 4px; width: 800px; height: 500px; image-rendering: pixelated; cursor: crosshair; background: #000; }
+    .stats { font-size: 11px; color: #888; min-width: 75px; text-align: right; }
+  </style>
+</head>
+<body>
+
+  <div class="hud">
+    <button class="mat active" data-id="1" style="border-bottom: 3px solid #eab308">[1] Sand</button>
+    <button class="mat" data-id="2" style="border-bottom: 3px solid #3b82f6">[2] Water</button>
+    <button class="mat" data-id="3" style="border-bottom: 3px solid #854d0e">[3] Wood</button>
+    <button class="mat" data-id="4" style="border-bottom: 3px solid #ef4444">[4] Fire</button>
+    <button class="mat" data-id="5" style="border-bottom: 3px solid #22c55e">[5] Acid</button>
+    <button class="mat" data-id="0" style="border-bottom: 3px solid #555">[6] Eraser</button>
+    <div class="sep"></div>
+    <label>Brush: <input type="range" id="brush" min="1" max="16" value="5"></label>
+    <div class="sep"></div>
+    <button id="gravBtn">Grav: Down</button>
+    <button id="clearBtn">Clear</button>
+    <div class="stats" id="fps">60 FPS</div>
+  </div>
+
+  <canvas id="sim" width="240" height="150"></canvas>
+
+  <script>
+    const canvas = document.getElementById('sim');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    // 0: Empty, 1: Sand, 2: Water, 3: Wood, 4: Fire, 5: Acid
+    const grid = new Uint8Array(W * H);
+    const life = new Uint8Array(W * H); // Tracks fire/acid decay
+    const updated = new Uint8Array(W * H);
+
+    // Little-endian ABGR 32-bit colors
+    const PALETTE = [
+      0xFF08080A, // 0: Empty
+      0xFF3CC3F6, // 1: Sand (Gold)
+      0xFFF6823B, // 2: Water (Blue)
+      0xFF1A4278, // 3: Wood (Brown)
+      0xFF2255FF, // 4: Fire (Orange/Red)
+      0xFF38F542  // 5: Acid (Neon Green)
+    ];
+
+    const imgData = ctx.createImageData(W, H);
+    const buf32 = new Uint32Array(imgData.data.buffer);
+
+    let currentMat = 1, brushSize = 5, grav = 1, isDown = false, mx = 0, my = 0;
+
+    // UI Bindings
+    document.querySelectorAll('.mat').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.mat').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMat = +btn.dataset.id;
+      };
+    });
+    document.getElementById('brush').oninput = e => brushSize = +e.target.value;
+    document.getElementById('gravBtn').onclick = e => {
+      grav *= -1;
+      e.target.textContent = `Grav: ${grav === 1 ? 'Down' : 'Up'}`;
+    };
+    document.getElementById('clearBtn').onclick = () => { grid.fill(0); life.fill(0); };
+
+    window.onkeydown = e => {
+      const idx = '123456'.indexOf(e.key);
+      if (idx !== -1) document.querySelectorAll('.mat')[idx].click();
+    };
+
+    const setMouse = e => {
+      const r = canvas.getBoundingClientRect();
+      mx = Math.floor((e.clientX - r.left) / r.width * W);
+      my = Math.floor((e.clientY - r.top) / r.height * H);
+    };
+    canvas.onmousedown = e => { isDown = true; setMouse(e); };
+    window.onmouseup = () => isDown = false;
+    canvas.onmousemove = setMouse;
+
+    function swap(i1, i2) {
+      const tG = grid[i1], tL = life[i1];
+      grid[i1] = grid[i2]; life[i1] = life[i2];
+      grid[i2] = tG;       life[i2] = tL;
+      updated[i1] = updated[i2] = 1;
+    }
+
+    function step() {
+      updated.fill(0);
+
+      if (isDown) {
+        for (let dy = -brushSize; dy <= brushSize; dy++) {
+          for (let dx = -brushSize; dx <= brushSize; dx++) {
+            if (dx * dx + dy * dy <= brushSize * brushSize) {
+              const px = mx + dx, py = my + dy;
+              if (px >= 0 && px < W && py >= 0 && py < H) {
+                if (currentMat === 0 || Math.random() < 0.75) {
+                  const idx = py * W + px;
+                  grid[idx] = currentMat;
+                  life[idx] = currentMat === 4 ? 25 + ((Math.random() * 30) | 0) : 0;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const startY = grav === 1 ? H - 1 : 0;
+      const endY   = grav === 1 ? -1 : H;
+
+      for (let y = startY; y !== endY; y -= grav) {
+        const l2r = Math.random() < 0.5;
+        for (let i = 0; i < W; i++) {
+          const x = l2r ? i : W - 1 - i;
+          const idx = y * W + x;
+          const type = grid[idx];
+          if (type === 0 || type === 3 || updated[idx]) continue;
+
+          const ny = y + grav;
+          const inY = ny >= 0 && ny < H;
+          const dir = Math.random() < 0.5 ? 1 : -1;
+
+          // 1: SAND (sinks in water)
+          if (type === 1 && inY) {
+            const b = ny * W + x;
+            if (grid[b] === 0 || grid[b] === 2) { swap(idx, b); continue; }
+            for (let s of [dir, -dir]) {
+              if (x + s >= 0 && x + s < W) {
+                const d = ny * W + (x + s);
+                if (grid[d] === 0 || grid[d] === 2) { swap(idx, d); break; }
+              }
+            }
+          }
+          // 2: WATER (falls & spreads horizontally)
+          else if (type === 2) {
+            if (inY) {
+              const b = ny * W + x;
+              if (grid[b] === 0) { swap(idx, b); continue; }
+              if (x + dir >= 0 && x + dir < W && grid[ny * W + x + dir] === 0) {
+                swap(idx, ny * W + x + dir); continue;
+              }
+            }
+            for (let s of [dir, -dir]) {
+              if (x + s >= 0 && x + s < W && grid[y * W + x + s] === 0) {
+                swap(idx, y * W + x + s); break;
+              }
+            }
+          }
+          // 4: FIRE (rises against gravity, ignites wood, dies in water)
+          else if (type === 4) {
+            if (life[idx]-- <= 0) { grid[idx] = 0; continue; }
+            const fy = y - grav;
+            const nx = x + ((Math.random() * 3) | 0) - 1;
+            if (fy >= 0 && fy < H && nx >= 0 && nx < W) {
+              const t = fy * W + nx;
+              if (grid[t] === 0) swap(idx, t);
+              else if (grid[t] === 2) { grid[idx] = 0; continue; }
+            }
+            // Ignite adjacent wood
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const wx = x + dx, wy = y + dy;
+                if (wx >= 0 && wx < W && wy >= 0 && wy < H) {
+                  const nIdx = wy * W + wx;
+                  if (grid[nIdx] === 3 && Math.random() < 0.06) {
+                    grid[nIdx] = 4; life[nIdx] = 50;
+                  } else if (grid[nIdx] === 2) {
+                    grid[idx] = 0;
+                  }
+                }
+              }
+            }
+          }
+          // 5: ACID (falls & dissolves non-acid neighbors)
+          else if (type === 5 && inY) {
+            const b = ny * W + x;
+            if (grid[b] === 0) { swap(idx, b); continue; }
+            if (grid[b] !== 5 && Math.random() < 0.25) {
+              grid[b] = 0; grid[idx] = 0; continue;
+            }
+            if (x + dir >= 0 && x + dir < W) {
+              const sIdx = y * W + x + dir;
+              if (grid[sIdx] === 0) swap(idx, sIdx);
+              else if (grid[sIdx] !== 5 && Math.random() < 0.15) { grid[sIdx] = 0; grid[idx] = 0; }
+            }
+          }
+        }
+      }
+    }
+
+    function draw() {
+      for (let i = 0; i < W * H; i++) {
+        const t = grid[i];
+        if (t === 4) {
+          buf32[i] = Math.random() < 0.35 ? 0xFF00D5FF : 0xFF1E3FFF; // Flicker fire
+        } else {
+          buf32[i] = PALETTE[t];
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    let last = performance.now(), frames = 0;
+    const fpsEl = document.getElementById('fps');
+    function loop(now) {
+      frames++;
+      if (now - last >= 500) {
+        fpsEl.textContent = `${Math.round((frames * 1000) / (now - last))} FPS`;
+        frames = 0; last = now;
+      }
+      step();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
